@@ -10,124 +10,22 @@ workflows:
         script: |
           cd flutter_app
           flutter pub get
-      - name: Fix Android Gradle
+
+      - name: Regenerate Android folder
         script: |
           cd flutter_app
-          # Regenerate android folder with correct gradle setup
-          flutter config --no-analytics
-          cd android
-          # Fix settings.gradle to use new plugin style
-          cat > settings.gradle << 'SETTINGS'
-pluginManagement {
-    def flutterSdkPath = {
-        def properties = new Properties()
-        file("local.properties").withInputStream { properties.load(it) }
-        def flutterSdkPath = properties.getProperty("flutter.sdk")
-        assert flutterSdkPath != null, "flutter.sdk not set in local.properties"
-        return flutterSdkPath
-    }()
-    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
-}
+          rm -rf android
+          flutter create --platforms android .
+          sed -i 's/com.example.flutter_app/eg.captain.app/g' android/app/build.gradle
+          sed -i 's/com.example.flutter_app/eg.captain.app/g' android/app/src/main/AndroidManifest.xml
+          echo '{"project_info":{"project_number":"000000000000","project_id":"captain-app","storage_bucket":"captain-app.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000000","android_client_info":{"package_name":"eg.captain.app"}},"oauth_client":[],"api_key":[{"current_key":"placeholder"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],"configuration_version":"1"}' > android/app/google-services.json
+          sed -i '/id "dev.flutter.flutter-gradle-plugin"/a\    id "com.google.gms.google-services"' android/app/build.gradle
+          sed -i 's/dependencies {/dependencies {\n    implementation platform("com.google.firebase:firebase-bom:32.7.0")/' android/app/build.gradle
 
-plugins {
-    id "dev.flutter.flutter-plugin-loader" version "1.0.0"
-    id "com.android.application" version "8.1.0" apply false
-    id "org.jetbrains.kotlin.android" version "1.9.10" apply false
-    id "com.google.gms.google-services" version "4.4.0" apply false
-}
-
-include ":app"
-SETTINGS
-          # Fix app/build.gradle
-          cat > app/build.gradle << 'APPGRADLE'
-plugins {
-    id "com.android.application"
-    id "kotlin-android"
-    id "dev.flutter.flutter-gradle-plugin"
-    id "com.google.gms.google-services"
-}
-
-android {
-    namespace "eg.captain.app"
-    compileSdk flutter.compileSdkVersion
-    ndkVersion "27.0.12077973"
-
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
-    }
-
-    kotlinOptions {
-        jvmTarget = "1.8"
-    }
-
-    defaultConfig {
-        applicationId "eg.captain.app"
-        minSdk 21
-        targetSdk flutter.targetSdkVersion
-        versionCode flutter.versionCode
-        versionName flutter.versionName
-        multiDexEnabled true
-    }
-
-    buildTypes {
-        release {
-            signingConfig signingConfigs.debug
-        }
-    }
-}
-
-flutter {
-    source "../.."
-}
-
-dependencies {
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.10"
-    implementation 'androidx.multidex:multidex:2.0.1'
-    implementation platform('com.google.firebase:firebase-bom:32.7.0')
-}
-APPGRADLE
-          # Fix root build.gradle
-          cat > build.gradle << 'ROOTGRADLE'
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-    }
-}
-
-rootProject.buildDir = "../build"
-subprojects {
-    project.buildDir = "${rootProject.buildDir}/${project.name}"
-    project.evaluationDependsOn(":app")
-}
-
-tasks.register("clean", Delete) {
-    delete rootProject.buildDir
-}
-ROOTGRADLE
-          # Fix gradle wrapper
-          cat > gradle/wrapper/gradle-wrapper.properties << 'WRAPPER'
-distributionBase=GRADLE_USER_HOME
-distributionPath=wrapper/dists
-zipStoreBase=GRADLE_USER_HOME
-zipStorePath=wrapper/dists
-distributionUrl=https\://services.gradle.org/distributions/gradle-8.3-all.zip
-WRAPPER
-          # Fix gradle.properties
-          cat > gradle.properties << 'PROPS'
-org.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=512m
-android.useAndroidX=true
-android.enableJetifier=true
-PROPS
       - name: Build APK
         script: |
           cd flutter_app
-          flutter build apk --debug
+          flutter build apk --debug --no-tree-shake-icons
+
     artifacts:
       - flutter_app/build/app/outputs/flutter-apk/app-debug.apk
