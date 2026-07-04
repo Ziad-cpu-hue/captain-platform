@@ -1,0 +1,27 @@
+workflows:
+  android-debug:
+    name: Android Debug APK
+    max_build_duration: 60
+    environment:
+      flutter: 3.24.5
+      java: 17
+    scripts:
+      - name: Get packages and patch plugins
+        script: |
+          cd flutter_app
+          flutter pub get
+          find $HOME/.pub-cache -name "build.gradle" -exec grep -l "flutter\.compileSdkVersion" {} \; | while read f; do
+            echo "Patching: $f"
+            sed -i.bak 's/flutter\.compileSdkVersion/35/g' "$f"
+            sed -i.bak 's/flutter\.minSdkVersion/21/g' "$f"
+            sed -i.bak 's/flutter\.targetSdkVersion/35/g' "$f"
+          done
+          echo "All plugins patched"
+
+      - name: Build APK
+        script: |
+          cd flutter_app
+          flutter build apk --debug --no-tree-shake-icons
+
+    artifacts:
+      - flutter_app/build/app/outputs/flutter-apk/app-debug.apk
