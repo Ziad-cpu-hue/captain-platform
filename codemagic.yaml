@@ -9,15 +9,6 @@ workflows:
       - name: Get Flutter packages
         script: |
           cd flutter_app
-          # Force upgrade geolocator to version that doesn't use flutter.compileSdkVersion
-          python3 -c "
-          content = open('pubspec.yaml').read()
-          content = content.replace('geolocator: ^10.1.0', 'geolocator: ^10.1.1')
-          content = content.replace('geolocator: ^10.0.0', 'geolocator: ^10.1.1')
-          open('pubspec.yaml', 'w').write(content)
-          print('pubspec.yaml updated')
-          "
-          flutter pub upgrade geolocator
           flutter pub get
 
       - name: Regenerate Android folder
@@ -28,8 +19,6 @@ workflows:
 
           python3 -c "
           # Fix package name
-          import re
-
           b = open('android/app/build.gradle').read()
           b = b.replace('com.example.flutter_app', 'eg.captain.app')
           open('android/app/build.gradle', 'w').write(b)
@@ -53,8 +42,7 @@ workflows:
               'id \"dev.flutter.flutter-gradle-plugin\"\n    id \"com.google.gms.google-services\"'
           )
           open('android/app/build.gradle', 'w').write(b)
-
-          print('All files updated')
+          print('Done')
           "
 
           # google-services.json placeholder
@@ -63,8 +51,40 @@ workflows:
           # Gradle wrapper for Java 17
           printf 'distributionBase=GRADLE_USER_HOME\ndistributionPath=wrapper/dists\nzipStoreBase=GRADLE_USER_HOME\nzipStorePath=wrapper/dists\ndistributionUrl=https\\://services.gradle.org/distributions/gradle-8.5-all.zip\n' > android/gradle/wrapper/gradle-wrapper.properties
 
-          # Show geolocator version being used
-          echo "=== Geolocator version ===" && grep geolocator pubspec.lock | head -5
+      - name: Patch geolocator plugin
+        script: |
+          # Find and patch geolocator_android build.gradle directly
+          GEOLOCATOR_GRADLE=$(find $HOME/.pub-cache -name "build.gradle" -path "*/geolocator_android*" 2>/dev/null | head -1)
+          if [ -n "$GEOLOCATOR_GRADLE" ]; then
+            echo "Found: $GEOLOCATOR_GRADLE"
+            python3 -c "
+          import sys
+          path = '$GEOLOCATOR_GRADLE'
+          content = open(path).read()
+          print('BEFORE:')
+          print(content[content.find('compileSdkVersion')-20:content.find('compileSdkVersion')+50] if 'compileSdkVersion' in content else 'not found')
+          # Replace flutter.compileSdkVersion with hard number
+          content = content.replace('flutter.compileSdkVersion', '35')
+          content = content.replace('flutter.minSdkVersion', '21')
+          content = content.replace('flutter.targetSdkVersion', '35')
+          open(path, 'w').write(content)
+          print('PATCHED successfully')
+            "
+          else
+            echo "geolocator not found in pub-cache yet, running pub get first"
+            cd flutter_app && flutter pub get
+            GEOLOCATOR_GRADLE=$(find $HOME/.pub-cache -name "build.gradle" -path "*/geolocator_android*" 2>/dev/null | head -1)
+            echo "Found after pub get: $GEOLOCATOR_GRADLE"
+            python3 -c "
+          path = '$GEOLOCATOR_GRADLE'
+          content = open(path).read()
+          content = content.replace('flutter.compileSdkVersion', '35')
+          content = content.replace('flutter.minSdkVersion', '21')
+          content = content.replace('flutter.targetSdkVersion', '35')
+          open(path, 'w').write(content)
+          print('PATCHED')
+            "
+          fi
 
       - name: Build APK
         script: |
