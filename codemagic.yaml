@@ -16,38 +16,39 @@ workflows:
           cd flutter_app
           rm -rf android
           flutter create --platforms android .
-          
-          # Fix package name (macOS sed syntax)
+
+          # Fix package name
           sed -i '' 's/com.example.flutter_app/eg.captain.app/g' android/app/build.gradle
           sed -i '' 's/com.example.flutter_app/eg.captain.app/g' android/app/src/main/AndroidManifest.xml
-          sed -i '' 's/com.example.flutter_app/eg.captain.app/g' android/app/src/main/kotlin/com/example/flutter_app/MainActivity.kt 2>/dev/null || true
-          
+
           # Add google-services.json
           echo '{"project_info":{"project_number":"000000000000","project_id":"captain-app","storage_bucket":"captain-app.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000000","android_client_info":{"package_name":"eg.captain.app"}},"oauth_client":[],"api_key":[{"current_key":"placeholder"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],"configuration_version":"1"}' > android/app/google-services.json
-          
-          # Add Firebase to build.gradle using Python (avoids sed issues)
+
+          # Add Firebase using Python
           python3 -c "
-          content = open('android/app/build.gradle').read()
-          content = content.replace(
+          # Update settings.gradle to add google-services plugin with version
+          s = open('android/settings.gradle').read()
+          s = s.replace(
+              'id \"com.android.application\" version',
+              'id \"com.google.gms.google-services\" version \"4.4.0\" apply false\n    id \"com.android.application\" version'
+          )
+          open('android/settings.gradle', 'w').write(s)
+
+          # Update app/build.gradle to apply google-services plugin
+          b = open('android/app/build.gradle').read()
+          b = b.replace(
               'id \"dev.flutter.flutter-gradle-plugin\"',
               'id \"dev.flutter.flutter-gradle-plugin\"\n    id \"com.google.gms.google-services\"'
           )
-          content = content.replace(
-              'dependencies {',
-              'dependencies {\n    implementation platform(\"com.google.firebase:firebase-bom:32.7.0\")'
-          )
-          open('android/app/build.gradle', 'w').write(content)
-          print('build.gradle updated')
+          open('android/app/build.gradle', 'w').write(b)
+          print('Done')
           "
-          
-          # Update Gradle wrapper to compatible version for Java 17
-          echo 'distributionBase=GRADLE_USER_HOME
-          distributionPath=wrapper/dists
-          zipStoreBase=GRADLE_USER_HOME
-          zipStorePath=wrapper/dists
-          distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-all.zip' > android/gradle/wrapper/gradle-wrapper.properties
-          
-          cat android/app/build.gradle
+
+          # Fix Gradle version for Java 17
+          printf 'distributionBase=GRADLE_USER_HOME\ndistributionPath=wrapper/dists\nzipStoreBase=GRADLE_USER_HOME\nzipStorePath=wrapper/dists\ndistributionUrl=https\\://services.gradle.org/distributions/gradle-8.5-all.zip\n' > android/gradle/wrapper/gradle-wrapper.properties
+
+          echo "=== settings.gradle ===" && cat android/settings.gradle
+          echo "=== app/build.gradle ===" && cat android/app/build.gradle
 
       - name: Build APK
         script: |
