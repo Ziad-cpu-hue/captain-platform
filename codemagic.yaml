@@ -17,16 +17,16 @@ workflows:
           rm -rf android
           flutter create --platforms android .
 
-          # Fix package name
-          sed -i '' 's/com.example.flutter_app/eg.captain.app/g' android/app/build.gradle
-          sed -i '' 's/com.example.flutter_app/eg.captain.app/g' android/app/src/main/AndroidManifest.xml
+          # Fix package name (try macOS first, fall back to Linux)
+          sed -i '' 's/com.example.flutter_app/eg.captain.app/g' android/app/build.gradle 2>/dev/null || sed -i 's/com.example.flutter_app/eg.captain.app/g' android/app/build.gradle
+          sed -i '' 's/com.example.flutter_app/eg.captain.app/g' android/app/src/main/AndroidManifest.xml 2>/dev/null || sed -i 's/com.example.flutter_app/eg.captain.app/g' android/app/src/main/AndroidManifest.xml
 
-          # Add google-services.json
+          # Add google-services.json placeholder
           echo '{"project_info":{"project_number":"000000000000","project_id":"captain-app","storage_bucket":"captain-app.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000000","android_client_info":{"package_name":"eg.captain.app"}},"oauth_client":[],"api_key":[{"current_key":"placeholder"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],"configuration_version":"1"}' > android/app/google-services.json
 
-          # Add Firebase using Python
+          # Use Python for all gradle edits (works on macOS and Linux)
           python3 -c "
-          # Update settings.gradle to add google-services plugin with version
+          # 1. Add google-services to settings.gradle
           s = open('android/settings.gradle').read()
           s = s.replace(
               'id \"com.android.application\" version',
@@ -34,21 +34,28 @@ workflows:
           )
           open('android/settings.gradle', 'w').write(s)
 
-          # Update app/build.gradle to apply google-services plugin
+          # 2. Add google-services plugin to app/build.gradle
           b = open('android/app/build.gradle').read()
           b = b.replace(
               'id \"dev.flutter.flutter-gradle-plugin\"',
               'id \"dev.flutter.flutter-gradle-plugin\"\n    id \"com.google.gms.google-services\"'
           )
           open('android/app/build.gradle', 'w').write(b)
-          print('Done')
+
+          # 3. Add compileSdkVersion to gradle.properties so ALL plugins can see it
+          # This fixes geolocator_android and any other plugin using flutter.compileSdkVersion
+          props = open('android/gradle.properties').read()
+          props += '\nandroid.compileSdkVersion=35\nandroid.targetSdkVersion=35\nandroid.minSdkVersion=21\n'
+          open('android/gradle.properties', 'w').write(props)
+
+          print('All gradle files updated successfully')
           "
 
-          # Fix Gradle version for Java 17
+          # Fix Gradle version compatible with Java 17
           printf 'distributionBase=GRADLE_USER_HOME\ndistributionPath=wrapper/dists\nzipStoreBase=GRADLE_USER_HOME\nzipStorePath=wrapper/dists\ndistributionUrl=https\\://services.gradle.org/distributions/gradle-8.5-all.zip\n' > android/gradle/wrapper/gradle-wrapper.properties
 
-          echo "=== settings.gradle ===" && cat android/settings.gradle
-          echo "=== app/build.gradle ===" && cat android/app/build.gradle
+          echo "=== Final gradle.properties ===" && cat android/gradle.properties
+          echo "=== Final app/build.gradle ===" && cat android/app/build.gradle
 
       - name: Build APK
         script: |
